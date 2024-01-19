@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express';
 import type { JSONSchema7 } from 'json-schema';
+import { isEmail } from 'class-validator';
 import ajv from '../ajv';
-import { Email, getTemplate, hasTemplate, saveEmail } from '../store';
-import isEmailValid from '../isEmailValid';
+import { Email, Type, TemplateV2, getTemplate, hasTemplate, saveEmail } from '../store';
 
 interface Replacement {
   Name: string;
@@ -76,7 +76,7 @@ const handleBulk: RequestHandler = async (req, res) => {
     return;
   }
 
-  const template = getTemplate(templateName);
+  const template = getTemplate(templateName) as TemplateV2;
   const templateSubject = template?.TemplateContent.Subject ?? '';
   const templateHtml = template?.TemplateContent.Html ?? '';
   const templateText = template?.TemplateContent.Text ?? '';
@@ -91,7 +91,7 @@ const handleBulk: RequestHandler = async (req, res) => {
 
     // Validate destination email address.
     const allEmails = [...entry.Destination.ToAddresses, ...entry.Destination.CcAddresses ?? [], ...entry.Destination.BccAddresses ?? []];
-    if (!allEmails.every(isEmailValid)) {
+    if (!allEmails.every((e) => isEmail(e))) {
       results.push({
         MessageId: messageId,
         Error: 'Invalid recipient email address(es)',
@@ -106,6 +106,7 @@ const handleBulk: RequestHandler = async (req, res) => {
     const text = replaceTemplateData(templateText, templateData, defaultTemplateData);
 
     const email: Email = {
+      type: Type.Email,
       messageId,
       from: fromEmailAddress,
       replyTo: replyToAddresses,

@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import type { JSONSchema7 } from 'json-schema';
 import ajv from '../ajv';
-import { hasTemplate, setTemplate, Template } from '../store';
+import { hasTemplate, setTemplate, TemplateV2 } from '../store';
 
 const handler: RequestHandler = (req, res) => {
   const valid = validate(req.body);
@@ -10,7 +10,7 @@ const handler: RequestHandler = (req, res) => {
     return;
   }
 
-  const template: Template = req.body;
+  const template: TemplateV2 = req.body;
 
   // Check if the template already exists.
   if (hasTemplate(template.TemplateName)) {

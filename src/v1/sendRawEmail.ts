@@ -1,8 +1,9 @@
+import { AddressObject, simpleParser } from 'mailparser';
 import type { RequestHandler } from 'express';
 import type { JSONSchema7 } from 'json-schema';
-import { AddressObject, simpleParser } from 'mailparser';
+
 import ajv from '../ajv';
-import { saveEmail } from '../store';
+import { saveEmail, Type } from '../store';
 
 const handler: RequestHandler = async (req, res) => {
   const valid = validate(req.body);
@@ -21,6 +22,7 @@ const handler: RequestHandler = async (req, res) => {
   }
 
   saveEmail({
+    type: Type.Email,
     messageId,
     from,
     replyTo: message.replyTo ? [message.replyTo.text] : [],
@@ -50,15 +52,27 @@ const sendRawEmailRequestSchema: JSONSchema7 = {
     Version: { type: 'string' },
 
     ConfigurationSetName: { type: 'string' },
-    'Destinations.member.1': { type: 'string' },
+    Destinations: {
+      type: 'array',
+      items: { type: 'string' },
+    },
     FromArn: { type: 'string' },
-    'RawMessage.Data': { type: 'string' },
+    RawMessage: {
+      type: 'object',
+      properties: {
+        Data: { type: 'string' },
+      },
+      required: ['Data'],
+    },
     ReturnPathArn: { type: 'string' },
     Source: { type: 'string' },
     SourceArn: { type: 'string' },
-    'Tags.member.1': { type: 'string' },
+    Tags: {
+      type: 'array',
+      items: { type: 'string' },
+    },
   },
-  required: ['Action', 'RawMessage.Data'],
+  required: ['Action'],
 };
 
 const validate = ajv.compile(sendRawEmailRequestSchema);

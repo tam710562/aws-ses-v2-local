@@ -2,7 +2,7 @@ import type { RequestHandler } from 'express';
 import type { JSONSchema7 } from 'json-schema';
 
 import ajv from '../ajv';
-import { saveEmail, Email, Type } from '../store';
+import { Email, saveEmail, Type, TemplateV1, getTemplate, hasTemplate } from '../store';
 
 const handler: RequestHandler = async (req, res) => {
   const valid = validate(req.body);
@@ -11,15 +11,24 @@ const handler: RequestHandler = async (req, res) => {
     return;
   }
 
-  if (!req.body['Message.Body.Text.Data'] && !req.body['Message.Body.Html.Data']) {
-    res.status(400).send({ message: 'Bad Request Exception', detail: 'aws-ses-v2-local: Must have either a HTML or Text body.' });
+  // if (!req.body['Message.Body.Text.Data'] && !req.body['Message.Body.Html.Data']) {
+  //   res.status(400).send({ message: 'Bad Request Exception', detail: 'aws-ses-v2-local: Must have either a HTML or Text body.' });
+  //   return;
+  // }
+
+  // if (!req.body['Message.Subject.Data']) {
+  //   res.status(400).send({ message: 'Bad Request Exception', detail: 'aws-ses-v2-local: Must have a subject.' });
+  //   return;
+  // }
+
+  // Try to retrieve the template.
+  const templateName = req.body.Template;
+  if (!hasTemplate(templateName)) {
+    res.status(400).send({ type: 'BadRequestException', message: 'Bad Request Exception', detail: `aws-ses-v2-local: Unable to find the template: ${templateName}.` });
     return;
   }
 
-  if (!req.body['Message.Subject.Data']) {
-    res.status(400).send({ message: 'Bad Request Exception', detail: 'aws-ses-v2-local: Must have a subject.' });
-    return;
-  }
+  const template = getTemplate(req.body.Template) as TemplateV1;
 
   const messageId = `ses-${Math.floor(Math.random() * 900000000 + 100000000)}`;
 
@@ -29,14 +38,14 @@ const handler: RequestHandler = async (req, res) => {
     from: req.body.Source,
     replyTo: Object.keys(req.body).filter((k) => k.startsWith('ReplyToAddresses.member.')).map((k) => req.body[k]),
     destination: {
-      to: Object.keys(req.body).filter((k) => k.startsWith('Destination.ToAddresses.member.')).map((k) => req.body[k]),
-      cc: Object.keys(req.body).filter((k) => k.startsWith('Destination.CcAddresses.member.')).map((k) => req.body[k]),
-      bcc: Object.keys(req.body).filter((k) => k.startsWith('Destination.BccAddresses.member.')).map((k) => req.body[k]),
+      to: Object.keys(req.body).filter((k) => k.startsWith('Destinations.member.1.Destination.ToAddresses.member.')).map((k) => req.body[k]),
+      cc: Object.keys(req.body).filter((k) => k.startsWith('Destinations.member.1.Destination.CcAddresses.member.')).map((k) => req.body[k]),
+      bcc: Object.keys(req.body).filter((k) => k.startsWith('Destinations.member.1.Destination.BccAddresses.member.')).map((k) => req.body[k]),
     },
-    subject: req.body['Message.Subject.Data'],
+    subject: template?.subjectPart ?? '',
     body: {
-      text: req.body['Message.Body.Text.Data'],
-      html: req.body['Message.Body.Html.Data'],
+      text: template?.textPart ?? '',
+      html: template?.htmlPart ?? '',
     },
     attachments: [],
     at: Math.floor(new Date().getTime() / 1000),
@@ -79,56 +88,33 @@ export default handler;
 const sendEmailRequestSchema: JSONSchema7 = {
   type: 'object',
   properties: {
-    Action: { type: 'string', pattern: '^SendEmail$' },
+    Action: { type: 'string', pattern: '^SendBulkTemplatedEmail$' },
     Version: { type: 'string' },
 
     ConfigurationSetName: { type: 'string' },
-    Destination: {
-      type: 'object',
-      properties: {
-        ToAddresses: {
-          type: 'array',
-          items: { type: 'string', format: 'email' },
-        },
-        CcAddresses: {
-          type: 'array',
-          items: { type: 'string', format: 'email' },
-        },
-        BccAddresses: {
-          type: 'array',
-          items: { type: 'string', format: 'email' },
-        },
-      },
-    },
-    Message: {
-      type: 'object',
-      properties: {
-        Body: {
-          type: 'object',
-          properties: {
-            Html: {
-              type: 'object',
-              properties: {
-                Data: { type: 'string' },
-                Charset: { type: 'string' },
+    Destinations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          Destination: {
+            type: 'object',
+            properties: {
+              ToAddresses: {
+                type: 'array',
+                items: { type: 'string', format: 'email' },
               },
-            },
-            Text: {
-              type: 'object',
-              properties: {
-                Data: { type: 'string' },
-                Charset: { type: 'string' },
+              CcAddresses: {
+                type: 'array',
+                items: { type: 'string', format: 'email' },
+              },
+              BccAddresses: {
+                type: 'array',
+                items: { type: 'string', format: 'email' },
               },
             },
           },
-        },
-        Subject: {
-          type: 'object',
-          properties: {
-            Data: { type: 'string' },
-            Charset: { type: 'string' },
-          },
-          required: ['Data'],
+          ReplacementTemplateData: { type: 'string', format: 'email' },
         },
       },
     },
@@ -136,6 +122,9 @@ const sendEmailRequestSchema: JSONSchema7 = {
       type: 'array',
       items: { type: 'string' },
     },
+    Template: { type: 'string' },
+    TemplateArn: { type: 'string' },
+    DefaultTemplateData: { type: 'string' },
     ReturnPath: { type: 'string' },
     ReturnPathArn: { type: 'string' },
     Source: { type: 'string' },
@@ -145,7 +134,7 @@ const sendEmailRequestSchema: JSONSchema7 = {
       items: { type: 'string' },
     },
   },
-  required: ['Action', 'Source'],
+  required: ['Action', 'Source', 'Template'],
 };
 
 const validate = ajv.compile(sendEmailRequestSchema);

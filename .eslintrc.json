@@ -17,6 +17,7 @@
         "@typescript-eslint"
     ],
     "rules": {
+        "linebreak-style": 0,
         "max-len": "off",
         "no-use-before-define": "off",
         "no-shadow": "off",

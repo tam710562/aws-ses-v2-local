@@ -1,8 +1,9 @@
 import type { RequestHandler } from 'express';
 import type { JSONSchema7 } from 'json-schema';
 import { AddressObject, simpleParser } from 'mailparser';
+
 import ajv from '../ajv';
-import { saveEmail } from '../store';
+import { saveEmail, Type } from '../store';
 
 const handler: RequestHandler = (req, res, next) => {
   const valid = validate(req.body);
@@ -39,6 +40,7 @@ const handleSimple: RequestHandler = async (req, res) => {
   const messageId = `ses-${Math.floor(Math.random() * 900000000 + 100000000)}`;
 
   saveEmail({
+    type: Type.Email,
     messageId,
     from: req.body.FromEmailAddress,
     replyTo: req.body.ReplyToAddresses ?? [],
@@ -65,6 +67,7 @@ const handleRaw: RequestHandler = async (req, res) => {
   const message = await simpleParser(Buffer.from(req.body.Content?.Raw?.Data, 'base64'));
 
   saveEmail({
+    type: Type.Email,
     messageId,
     from: message.from?.text ?? req.body.Source,
     replyTo: message.replyTo ? [message.replyTo.text] : [],
